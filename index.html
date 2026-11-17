@@ -994,6 +994,7 @@
 
   /* ---------- procedural audio ---------- */
   let musicOn = true, sfxOn = true;
+  const MUSIC_VOL = 2.2;   // background lo-fi + ambience level
   let ac = null, musicGain, sfxGain, ambFilter, ambGain, lfoGain, noiseBuf;
   let nextT = 0, stepN = 0;
   const midi = (m) => 440 * Math.pow(2, (m - 69) / 12);
@@ -1008,9 +1009,11 @@
 
     const master = ac.createGain();
     master.gain.value = 0.85;
-    master.connect(ac.destination);
+    const comp = ac.createDynamicsCompressor();   // keeps the louder mix from clipping
+    master.connect(comp);
+    comp.connect(ac.destination);
     musicGain = ac.createGain();
-    musicGain.gain.value = musicOn ? 1 : 0;
+    musicGain.gain.value = musicOn ? MUSIC_VOL : 0;
     musicGain.connect(master);
     sfxGain = ac.createGain();
     sfxGain.gain.value = sfxOn ? 1 : 0;
@@ -1177,7 +1180,7 @@
     musicOn = !musicOn;
     $('music-btn').classList.toggle('muted', !musicOn);
     initAudio();
-    if (ac && musicGain) musicGain.gain.setTargetAtTime(musicOn ? 1 : 0, ac.currentTime, 0.1);
+    if (ac && musicGain) musicGain.gain.setTargetAtTime(musicOn ? MUSIC_VOL : 0, ac.currentTime, 0.1);
   });
   $('sfx-btn').addEventListener('click', () => {
     sfxOn = !sfxOn;
