@@ -26,6 +26,17 @@
       -webkit-user-select: none;
     }
 
+    /* Safari blocks typing in inputs when user-select is none */
+    input, textarea {
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    button, input {
+      font-family: inherit;
+      touch-action: manipulation;
+    }
+
     html, body {
       margin: 0;
       padding: 0;
@@ -672,4 +683,1120 @@
               <div class="tod-badge truth" id="tod-badge">TABLE READY</div>
               <div style="font-size:12px;color:var(--ink-muted);" id="tod-turn-lbl">Spin the compass or draw a card</div>
             </div>
-            <div class="tod-prompt" id="tod-prompt">
+            <div class="tod-prompt" id="tod-prompt">Add your friends, then draw a card to begin.</div>
+            <div class="tod-actions">
+              <button class="primary-btn" id="tod-truth-btn" style="background:var(--sage);">Truth</button>
+              <button class="primary-btn" id="tod-dare-btn">Dare</button>
+              <button class="ghost-btn" id="tod-skip-btn">Skip</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. MEMORY DECK -->
+      <div class="view" id="view-cards">
+        <div class="view-head">
+          <div>
+            <h2 class="view-title">Memory Deck</h2>
+            <div class="view-sub">Flip two cards to find a pair. In 2P, a match keeps your turn.</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <div class="seg-group" id="mem-mode-seg">
+              <button class="seg-btn active" data-mode="solo">Solo</button>
+              <button class="seg-btn" data-mode="2p">2P Pass</button>
+            </div>
+            <button class="ghost-btn" id="mem-reset-btn">Shuffle</button>
+          </div>
+        </div>
+        <div class="status-bar" id="mem-status">Find all 8 pairs</div>
+        <div class="cards-grid" id="mem-grid"></div>
+        <div class="score-strip" id="mem-scores"></div>
+      </div>
+
+      <!-- 4. FOUR IN A ROW -->
+      <div class="view" id="view-c4">
+        <div class="view-head">
+          <div>
+            <h2 class="view-title">Four-in-a-Row</h2>
+            <div class="view-sub">Tap a column to drop a token. Connect four to win.</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <div class="seg-group" id="c4-mode-seg">
+              <button class="seg-btn active" data-mode="bot">Solo vs Bot</button>
+              <button class="seg-btn" data-mode="2p">2P Pass</button>
+            </div>
+            <button class="ghost-btn" id="c4-reset-btn">Reset</button>
+          </div>
+        </div>
+        <div class="status-bar" id="c4-status">Ochre to drop</div>
+        <div class="c4-board" id="c4-board"></div>
+        <div class="score-strip" id="c4-scores"></div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- helpers ---------- */
+  const $ = (id) => document.getElementById(id);
+  const rand = (n) => Math.floor(Math.random() * n);
+  const shuffle = (a) => {
+    a = a.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = rand(i + 1);
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+
+  function bindSeg(id, attr, cb) {
+    const seg = $(id);
+    seg.addEventListener('click', (e) => {
+      const b = e.target.closest('.seg-btn');
+      if (!b || b.classList.contains('active')) return;
+      seg.querySelectorAll('.seg-btn').forEach((x) => x.classList.toggle('active', x === b));
+      cb(b.dataset[attr]);
+    });
+  }
+
+  /* ---------- ambient backdrops (canvas) ---------- */
+  const VIBES = ['Rainy Café', 'Mountain Cabin', 'Seaside Patio'];
+  const cv = $('bg-canvas');
+  const cx = cv.getContext ? cv.getContext('2d') : null;
+  let W = 0, H = 0, vibe = 0, lastT = 0;
+
+  const scenes = [
+    { /* Rainy Café */
+      init() {
+        const n = Math.max(60, Math.min(220, Math.round((W * H) / 9000)));
+        this.drops = Array.from({ length: n }, () => ({
+          x: Math.random() * W, y: Math.random() * H,
+          l: 10 + Math.random() * 18, v: 420 + Math.random() * 380
+        }));
+        this.bokeh = Array.from({ length: 16 }, () => ({
+          x: Math.random() * W, y: H * 0.35 + Math.random() * H * 0.6,
+          r: 16 + Math.random() * 40, ph: Math.random() * 6.28, w: Math.random()
+        }));
+      },
+      draw(t, dt) {
+        const g = cx.createLinearGradient(0, 0, 0, H);
+        g.addColorStop(0, '#1a1613');
+        g.addColorStop(1, '#33231a');
+        cx.fillStyle = g;
+        cx.fillRect(0, 0, W, H);
+
+        for (const b of this.bokeh) {
+          const a = 0.07 + 0.05 * Math.sin(t * 0.7 + b.ph);
+          const col = b.w > 0.5 ? '255,180,90' : '255,214,150';
+          const rg = cx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+          rg.addColorStop(0, 'rgba(' + col + ',' + (a * 1.6) + ')');
+          rg.addColorStop(1, 'rgba(' + col + ',0)');
+          cx.fillStyle = rg;
+          cx.beginPath();
+          cx.arc(b.x, b.y, b.r, 0, 6.283);
+          cx.fill();
+        }
+
+        cx.strokeStyle = 'rgba(251,247,240,0.035)';
+        cx.lineWidth = 2;
+        cx.beginPath();
+        cx.moveTo(W * 0.5, 0); cx.lineTo(W * 0.5, H);
+        cx.moveTo(0, H * 0.38); cx.lineTo(W, H * 0.38);
+        cx.stroke();
+
+        cx.strokeStyle = 'rgba(190,208,224,0.26)';
+        cx.lineWidth = 1;
+        cx.beginPath();
+        for (const d of this.drops) {
+          cx.moveTo(d.x, d.y);
+          cx.lineTo(d.x - d.l * 0.12, d.y + d.l);
+          d.y += d.v * dt;
+          d.x -= d.v * 0.12 * dt;
+          if (d.y > H + 20) { d.y = -d.l; d.x = Math.random() * (W + 100); }
+        }
+        cx.stroke();
+      }
+    },
+    { /* Mountain Cabin */
+      init() {
+        this.stars = Array.from({ length: 80 }, () => ({
+          x: Math.random() * W, y: Math.random() * H * 0.5,
+          r: 0.5 + Math.random() * 1.3, ph: Math.random() * 6.28
+        }));
+        this.flies = Array.from({ length: 16 }, () => ({
+          x: Math.random() * W, y: H * 0.55 + Math.random() * H * 0.4,
+          vx: (Math.random() - 0.5) * 12, vy: (Math.random() - 0.5) * 8,
+          ph: Math.random() * 6.28
+        }));
+      },
+      ridge(yBase, amp, seed, color) {
+        cx.fillStyle = color;
+        cx.beginPath();
+        cx.moveTo(0, H);
+        for (let x = 0; x <= W + 8; x += 8) {
+          const y = yBase - amp * (
+            0.55 * Math.sin(x * 0.004 + seed) +
+            0.30 * Math.sin(x * 0.011 + seed * 2.3) +
+            0.15 * Math.sin(x * 0.027 + seed * 4.1));
+          cx.lineTo(x, y);
+        }
+        cx.lineTo(W + 8, H);
+        cx.closePath();
+        cx.fill();
+      },
+      draw(t, dt) {
+        const g = cx.createLinearGradient(0, 0, 0, H);
+        g.addColorStop(0, '#18162b');
+        g.addColorStop(0.5, '#43304f');
+        g.addColorStop(1, '#b8664a');
+        cx.fillStyle = g;
+        cx.fillRect(0, 0, W, H);
+
+        for (const s of this.stars) {
+          cx.fillStyle = 'rgba(255,244,220,' + (0.35 + 0.35 * Math.sin(t * 1.3 + s.ph)) + ')';
+          cx.beginPath();
+          cx.arc(s.x, s.y, s.r, 0, 6.283);
+          cx.fill();
+        }
+        cx.fillStyle = 'rgba(255,240,210,0.85)';
+        cx.beginPath();
+        cx.arc(W * 0.18, H * 0.16, 22, 0, 6.283);
+        cx.fill();
+
+        this.ridge(H * 0.62, H * 0.16, 1.2, '#352a46');
+        this.ridge(H * 0.72, H * 0.14, 3.4, '#251d33');
+
+        // little cabin with a lit window
+        const bx = W * 0.78, by = H * 0.86;
+        const glow = cx.createRadialGradient(bx, by - 12, 0, bx, by - 12, 70);
+        glow.addColorStop(0, 'rgba(255,180,90,0.28)');
+        glow.addColorStop(1, 'rgba(255,180,90,0)');
+        cx.fillStyle = glow;
+        cx.fillRect(bx - 80, by - 90, 160, 140);
+        cx.fillStyle = '#0f0b14';
+        cx.fillRect(bx - 34, by - 26, 68, 26);
+        cx.fillStyle = '#0b080f';
+        cx.beginPath();
+        cx.moveTo(bx - 42, by - 26); cx.lineTo(bx, by - 52); cx.lineTo(bx + 42, by - 26);
+        cx.closePath();
+        cx.fill();
+        cx.fillStyle = 'rgba(255,190,100,' + (0.8 + 0.15 * Math.sin(t * 3)) + ')';
+        cx.fillRect(bx - 8, by - 18, 16, 12);
+
+        this.ridge(H * 0.84, H * 0.10, 5.7, '#16111f');
+
+        for (const f of this.flies) {
+          f.x += f.vx * dt + Math.sin(t + f.ph) * 6 * dt;
+          f.y += f.vy * dt;
+          if (f.x < -10) f.x = W + 10; if (f.x > W + 10) f.x = -10;
+          if (f.y < H * 0.5) f.y = H * 0.95; if (f.y > H) f.y = H * 0.55;
+          const a = 0.5 + 0.5 * Math.sin(t * 2 + f.ph);
+          cx.fillStyle = 'rgba(255,230,140,' + (0.12 * a) + ')';
+          cx.beginPath(); cx.arc(f.x, f.y, 9, 0, 6.283); cx.fill();
+          cx.fillStyle = 'rgba(255,240,170,' + (0.85 * a) + ')';
+          cx.beginPath(); cx.arc(f.x, f.y, 2, 0, 6.283); cx.fill();
+        }
+      }
+    },
+    { /* Seaside Patio */
+      init() {
+        this.birds = Array.from({ length: 4 }, () => ({
+          x: Math.random() * W, y: H * (0.12 + Math.random() * 0.25),
+          v: 14 + Math.random() * 14, ph: Math.random() * 6.28, s: 6 + Math.random() * 5
+        }));
+      },
+      draw(t, dt) {
+        const hy = H * 0.6;
+        const sky = cx.createLinearGradient(0, 0, 0, hy);
+        sky.addColorStop(0, '#2c2342');
+        sky.addColorStop(0.6, '#a9526a');
+        sky.addColorStop(1, '#f4b36e');
+        cx.fillStyle = sky;
+        cx.fillRect(0, 0, W, hy);
+
+        const sx = W * 0.68, sr = Math.min(W, H) * 0.085;
+        const halo = cx.createRadialGradient(sx, hy, 0, sx, hy, sr * 4);
+        halo.addColorStop(0, 'rgba(255,200,130,0.35)');
+        halo.addColorStop(1, 'rgba(255,200,130,0)');
+        cx.fillStyle = halo;
+        cx.fillRect(0, 0, W, hy + 4);
+        cx.fillStyle = '#ffe0a8';
+        cx.beginPath();
+        cx.arc(sx, hy - sr * 0.2, sr, 0, 6.283);
+        cx.fill();
+
+        const sea = cx.createLinearGradient(0, hy, 0, H);
+        sea.addColorStop(0, '#d27a5c');
+        sea.addColorStop(0.35, '#4a3552');
+        sea.addColorStop(1, '#1e1a2a');
+        cx.fillStyle = sea;
+        cx.fillRect(0, hy, W, H - hy);
+
+        const rows = 14, step = (H - hy) * 0.7 / rows;
+        for (let i = 0; i < rows; i++) {
+          const w = sr * (1.4 - i * 0.06) * (0.7 + 0.3 * Math.sin(t * 2 + i));
+          cx.fillStyle = 'rgba(255,224,170,' + (0.28 * (1 - i / (rows + 2))) + ')';
+          cx.fillRect(sx - w / 2, hy + 4 + i * step, w, 2);
+        }
+
+        for (let k = 0; k < 9; k++) {
+          const y = hy + (k + 1) * ((H - hy) / 10);
+          cx.strokeStyle = 'rgba(255,230,190,' + (0.09 + 0.02 * k) + ')';
+          cx.lineWidth = 1;
+          cx.beginPath();
+          for (let x = 0; x <= W + 12; x += 12) {
+            const yy = y + Math.sin(x * 0.012 + t * 0.9 + k * 1.7) * (1.5 + k * 0.7);
+            if (x === 0) cx.moveTo(x, yy); else cx.lineTo(x, yy);
+          }
+          cx.stroke();
+        }
+
+        cx.strokeStyle = 'rgba(30,20,40,0.55)';
+        cx.lineWidth = 1.4;
+        for (const b of this.birds) {
+          b.x += b.v * dt;
+          if (b.x > W + 20) b.x = -20;
+          const flap = Math.sin(t * 5 + b.ph) * b.s * 0.5;
+          cx.beginPath();
+          cx.moveTo(b.x - b.s, b.y);
+          cx.quadraticCurveTo(b.x - b.s * 0.5, b.y - b.s * 0.5 + flap, b.x, b.y);
+          cx.quadraticCurveTo(b.x + b.s * 0.5, b.y - b.s * 0.5 + flap, b.x + b.s, b.y);
+          cx.stroke();
+        }
+      }
+    }
+  ];
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    cv.width = Math.round(W * dpr);
+    cv.height = Math.round(H * dpr);
+    if (cx) cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    scenes[vibe].init();
+  }
+
+  function frame(now) {
+    const dt = Math.min(0.05, (now - lastT) / 1000 || 0);
+    lastT = now;
+    if (cx) scenes[vibe].draw(now / 1000, dt);
+    requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  lastT = performance.now();
+  requestAnimationFrame(frame);
+
+  /* ---------- procedural audio ---------- */
+  let musicOn = true, sfxOn = true;
+  let ac = null, musicGain, sfxGain, ambFilter, ambGain, lfoGain, noiseBuf;
+  let nextT = 0, stepN = 0;
+  const midi = (m) => 440 * Math.pow(2, (m - 69) / 12);
+  const CHORDS = [[48, 55, 59, 64], [45, 52, 55, 60], [41, 48, 52, 57], [43, 50, 53, 59]];
+  const PENT = [72, 74, 76, 79, 81];
+
+  function initAudio() {
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try { ac = new AC(); } catch (e) { ac = null; return; }
+
+    const master = ac.createGain();
+    master.gain.value = 0.85;
+    master.connect(ac.destination);
+    musicGain = ac.createGain();
+    musicGain.gain.value = musicOn ? 1 : 0;
+    musicGain.connect(master);
+    sfxGain = ac.createGain();
+    sfxGain.gain.value = sfxOn ? 1 : 0;
+    sfxGain.connect(master);
+
+    const len = ac.sampleRate * 2;
+    noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+
+    const src = ac.createBufferSource();
+    src.buffer = noiseBuf;
+    src.loop = true;
+    ambFilter = ac.createBiquadFilter();
+    ambGain = ac.createGain();
+    ambGain.gain.value = 0.04;
+    const lfo = ac.createOscillator();
+    lfo.frequency.value = 0.12;
+    lfoGain = ac.createGain();
+    lfoGain.gain.value = 0;
+    lfo.connect(lfoGain);
+    lfoGain.connect(ambGain.gain);
+    src.connect(ambFilter);
+    ambFilter.connect(ambGain);
+    ambGain.connect(musicGain);
+    src.start();
+    lfo.start();
+    applyAmbience();
+
+    nextT = ac.currentTime + 0.1;
+    setInterval(schedule, 150);
+    if (ac.state === 'suspended') ac.resume();
+  }
+
+  function applyAmbience() {
+    if (!ac) return;
+    const t = ac.currentTime;
+    if (vibe === 0) {          // rain
+      ambFilter.type = 'bandpass'; ambFilter.Q.value = 0.5;
+      ambFilter.frequency.setTargetAtTime(2800, t, 0.3);
+      ambGain.gain.setTargetAtTime(0.05, t, 0.3);
+      lfoGain.gain.setTargetAtTime(0, t, 0.3);
+    } else if (vibe === 1) {   // mountain wind
+      ambFilter.type = 'lowpass'; ambFilter.Q.value = 0.7;
+      ambFilter.frequency.setTargetAtTime(420, t, 0.3);
+      ambGain.gain.setTargetAtTime(0.035, t, 0.3);
+      lfoGain.gain.setTargetAtTime(0.015, t, 0.3);
+    } else {                   // sea
+      ambFilter.type = 'lowpass'; ambFilter.Q.value = 0.7;
+      ambFilter.frequency.setTargetAtTime(900, t, 0.3);
+      ambGain.gain.setTargetAtTime(0.04, t, 0.3);
+      lfoGain.gain.setTargetAtTime(0.028, t, 0.3);
+    }
+  }
+
+  function schedule() {
+    if (!ac) return;
+    if (ac.state !== 'running') { nextT = Math.max(nextT, ac.currentTime + 0.05); return; }
+    const eighth = 60 / 72 / 2;
+    if (nextT < ac.currentTime) nextT = ac.currentTime + 0.05;
+    while (nextT < ac.currentTime + 0.5) {
+      if (musicOn) playStep(stepN, nextT);
+      nextT += eighth;
+      stepN++;
+    }
+  }
+
+  function playStep(s, t) {
+    const chord = CHORDS[Math.floor(s / 8) % 4];
+    if (s % 8 === 0) chord.forEach((m, i) => pad(midi(m), t + i * 0.03, 3.6));
+    if (s % 4 === 0) kick(t);
+    if (s % 2 === 1) hat(t);
+    if (s % 2 === 0 && Math.random() < 0.38) pluck(midi(PENT[rand(PENT.length)]), t, 0.9);
+  }
+
+  function pad(f, t, dur) {
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.05, t + 0.35);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const lp = ac.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 900;
+    [-6, 6].forEach((det) => {
+      const o = ac.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = f;
+      o.detune.value = det;
+      o.connect(lp);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    });
+    lp.connect(g);
+    g.connect(musicGain);
+  }
+
+  function kick(t) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.setValueAtTime(110, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + 0.12);
+    g.gain.setValueAtTime(0.16, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    o.connect(g); g.connect(musicGain);
+    o.start(t); o.stop(t + 0.25);
+  }
+
+  function hat(t) {
+    const s = ac.createBufferSource(), hp = ac.createBiquadFilter(), g = ac.createGain();
+    s.buffer = noiseBuf;
+    hp.type = 'highpass';
+    hp.frequency.value = 6000;
+    g.gain.setValueAtTime(0.012, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    s.connect(hp); hp.connect(g); g.connect(musicGain);
+    s.start(t, Math.random()); s.stop(t + 0.06);
+  }
+
+  function pluck(f, t, dur) {
+    const o = ac.createOscillator(), g = ac.createGain(), lp = ac.createBiquadFilter();
+    o.type = 'triangle';
+    o.frequency.value = f;
+    lp.type = 'lowpass';
+    lp.frequency.value = 2000;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.05, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(lp); lp.connect(g); g.connect(musicGain);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+
+  function tone(f, t, dur, type, vol, f2) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(f, t);
+    if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(sfxGain);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  function sfx(kind) {
+    if (!ac || !sfxOn) return;
+    if (ac.state === 'suspended') ac.resume();
+    const t = ac.currentTime;
+    switch (kind) {
+      case 'x':     tone(520, t, 0.14, 'triangle', 0.14, 440); break;
+      case 'o':     tone(392, t, 0.16, 'sine', 0.16, 330); break;
+      case 'flip':  tone(800, t, 0.06, 'square', 0.03, 500); break;
+      case 'match': tone(660, t, 0.18, 'sine', 0.14); tone(880, t + 0.1, 0.26, 'sine', 0.14); break;
+      case 'miss':  tone(220, t, 0.2, 'triangle', 0.1, 160); break;
+      case 'drop':  tone(300, t, 0.18, 'sine', 0.2, 90); break;
+      case 'spin':  tone(300, t, 0.9, 'sine', 0.07, 720); break;
+      case 'card':  tone(500, t, 0.1, 'triangle', 0.1, 700); break;
+      case 'win':   [523, 659, 784, 1047].forEach((f, i) => tone(f, t + i * 0.11, 0.3, 'triangle', 0.14)); break;
+    }
+  }
+
+  document.addEventListener('pointerdown', initAudio, { passive: true });
+  document.addEventListener('keydown', initAudio);
+
+  $('music-btn').addEventListener('click', () => {
+    musicOn = !musicOn;
+    $('music-btn').classList.toggle('muted', !musicOn);
+    initAudio();
+    if (ac && musicGain) musicGain.gain.setTargetAtTime(musicOn ? 1 : 0, ac.currentTime, 0.1);
+  });
+  $('sfx-btn').addEventListener('click', () => {
+    sfxOn = !sfxOn;
+    $('sfx-btn').classList.toggle('muted', !sfxOn);
+    initAudio();
+    if (ac && sfxGain) sfxGain.gain.setTargetAtTime(sfxOn ? 1 : 0, ac.currentTime, 0.05);
+    sfx('card');
+  });
+  $('vibe-btn').addEventListener('click', () => {
+    vibe = (vibe + 1) % VIBES.length;
+    $('vibe-lbl').textContent = VIBES[vibe];
+    scenes[vibe].init();
+    applyAmbience();
+  });
+
+  /* ---------- tabs ---------- */
+  document.querySelectorAll('.tab-btn').forEach((b) => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach((x) => x.classList.toggle('active', x === b));
+      document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + b.dataset.tab));
+      sfx('card');
+    });
+  });
+
+  /* =====================================================
+     1. INFINITE XO
+     ===================================================== */
+  const XO_X = '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#c45d3b" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+  const XO_O = '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#3d6b58" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/></svg>';
+  const XO_NAME = { X: 'Terracotta (X)', O: 'Sage (O)' };
+  const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  const XO_ORDER = [4, 0, 2, 6, 8, 1, 3, 5, 7];
+
+  const xo = { b: Array(9).fill(null), q: { X: [], O: [] }, turn: 'X', starter: 'X',
+               over: false, win: null, scores: { X: 0, O: 0 }, mode: 'bot', token: 0 };
+  const xoCells = [];
+
+  function xoApply(b, q, p, c) {
+    const nb = b.slice();
+    const nq = { X: q.X.slice(), O: q.O.slice() };
+    nb[c] = p;
+    nq[p].push(c);
+    if (nq[p].length > 3) nb[nq[p].shift()] = null;
+    return { b: nb, q: nq };
+  }
+  const xoWin = (b, p) => LINES.some((l) => l.every((i) => b[i] === p));
+
+  function xoNegamax(b, q, p, depth, alpha, beta) {
+    if (depth === 0) return 0;
+    const other = p === 'X' ? 'O' : 'X';
+    let best = -Infinity;
+    for (const c of XO_ORDER) {
+      if (b[c]) continue;
+      const r = xoApply(b, q, p, c);
+      const s = xoWin(r.b, p) ? 100 + depth : -xoNegamax(r.b, r.q, other, depth - 1, -beta, -alpha);
+      if (s > best) best = s;
+      if (best > alpha) alpha = best;
+      if (alpha >= beta) break;
+    }
+    return best;
+  }
+
+  function xoBotPick() {
+    const empty = XO_ORDER.filter((i) => !xo.b[i]);
+    for (const c of empty) {                       // take a win if there is one
+      if (xoWin(xoApply(xo.b, xo.q, 'O', c).b, 'O')) return c;
+    }
+    if (Math.random() < 0.1) return empty[rand(empty.length)];   // keep it beatable
+    let best = -Infinity, picks = [];
+    for (const c of empty) {
+      const r = xoApply(xo.b, xo.q, 'O', c);
+      const s = -xoNegamax(r.b, r.q, 'X', 5, -Infinity, Infinity);
+      if (s > best) { best = s; picks = [c]; } else if (s === best) picks.push(c);
+    }
+    return picks[rand(picks.length)];
+  }
+
+  function xoRender() {
+    const fade = (!xo.over && xo.q[xo.turn].length === 3) ? xo.q[xo.turn][0] : -1;
+    const line = xo.win ? LINES.find((l) => l.every((i) => xo.b[i] === xo.win)) : null;
+    xoCells.forEach((el, i) => {
+      const m = xo.b[i] || '';
+      if (el.dataset.m !== m) {
+        el.dataset.m = m;
+        el.innerHTML = m === 'X' ? XO_X : m === 'O' ? XO_O : '';
+      }
+      el.classList.toggle('fading', i === fade);
+      el.classList.toggle('win', !!(line && line.includes(i)));
+    });
+    let msg;
+    if (xo.over) msg = XO_NAME[xo.win] + ' wins! Tap the board or Reset for another round.';
+    else if (xo.mode === 'bot' && xo.turn === 'O') msg = 'Sage (O) is thinking…';
+    else msg = XO_NAME[xo.turn] + ' to move';
+    $('xo-status').textContent = msg;
+    $('xo-scores').textContent = 'Terracotta (X): ' + xo.scores.X + '  ·  Sage (O): ' + xo.scores.O;
+  }
+
+  function xoBotSoon() {
+    const tok = xo.token;
+    setTimeout(() => {
+      if (tok !== xo.token || xo.over || xo.turn !== 'O' || xo.mode !== 'bot') return;
+      xoMove(xoBotPick());
+    }, 520);
+  }
+
+  function xoMove(i) {
+    const p = xo.turn;
+    const r = xoApply(xo.b, xo.q, p, i);
+    xo.b = r.b; xo.q = r.q;
+    sfx(p === 'X' ? 'x' : 'o');
+    if (xoWin(xo.b, p)) { xo.over = true; xo.win = p; xo.scores[p]++; sfx('win'); }
+    else xo.turn = p === 'X' ? 'O' : 'X';
+    xoRender();
+    if (!xo.over && xo.mode === 'bot' && xo.turn === 'O') xoBotSoon();
+  }
+
+  function xoNewRound(flipStarter) {
+    xo.token++;
+    if (flipStarter) xo.starter = xo.starter === 'X' ? 'O' : 'X';
+    xo.b = Array(9).fill(null);
+    xo.q = { X: [], O: [] };
+    xo.turn = xo.starter;
+    xo.over = false;
+    xo.win = null;
+    xoRender();
+    if (xo.mode === 'bot' && xo.turn === 'O') xoBotSoon();
+  }
+
+  function xoClick(i) {
+    if (xo.over) { xoNewRound(true); return; }
+    if (xo.b[i]) return;
+    if (xo.mode === 'bot' && xo.turn === 'O') return;
+    xoMove(i);
+  }
+
+  (function buildXO() {
+    const board = $('xo-board');
+    for (let i = 0; i < 9; i++) {
+      const el = document.createElement('button');
+      el.className = 'xo-cell';
+      el.setAttribute('aria-label', 'Cell ' + (i + 1));
+      el.addEventListener('click', () => xoClick(i));
+      board.appendChild(el);
+      xoCells.push(el);
+    }
+  })();
+  bindSeg('xo-mode-seg', 'mode', (m) => {
+    xo.mode = m; xo.scores = { X: 0, O: 0 }; xo.starter = 'X'; xoNewRound(false);
+  });
+  $('xo-reset-btn').addEventListener('click', () => xoNewRound(xo.over));
+  xoRender();
+
+  /* =====================================================
+     2. TRUTH & DARE
+     ===================================================== */
+  const TOD = {
+    chill: {
+      truth: [
+        "What's a song you secretly know every word to?",
+        "What's the most embarrassing thing in your camera roll? Describe it, no showing.",
+        "What's a small thing that instantly makes your day better?",
+        "Who at this table would you trust to plan your surprise party?",
+        "What's the last thing you searched for online?",
+        "What's a food combination you love that other people find weird?",
+        "What's the most spontaneous thing you've ever done?",
+        "What's a movie you pretend to have seen but haven't?",
+        "What's your go-to comfort show to rewatch?",
+        "What's the best compliment you've ever received?",
+        "If you could live in any decade, which one and why?",
+        "What was your worst haircut or outfit phase?"
+      ],
+      dare: [
+        "Do your best impression of someone at this table until your next turn.",
+        "Narrate everything you do in a movie-trailer voice until your next turn.",
+        "Let the group pick a song and sing the chorus.",
+        "Show the group your most-used emoji and act it out.",
+        "Try to balance a spoon on your nose for 10 seconds.",
+        "Recite the alphabet backwards as fast as you can.",
+        "Swap seats with someone and play them for one round.",
+        "Tell a 30-second story where every sentence starts with the next letter of the alphabet.",
+        "Give everyone at the table a nickname and use them for the rest of the game.",
+        "Draw a portrait of the person on your left in 30 seconds without looking at the paper.",
+        "Strut across the room like it's a fashion runway.",
+        "Hum a song and let the group guess it within 30 seconds."
+      ]
+    },
+    deep: {
+      truth: [
+        "What's something you're afraid you'll never get to do?",
+        "What's a moment from this year you'd happily relive?",
+        "Who has shaped you the most, and what did they teach you?",
+        "What's a belief you've changed your mind about?",
+        "When did you last feel truly proud of yourself?",
+        "What's something you wish people understood about you?",
+        "What's a regret you've learned something from?",
+        "What does a perfect ordinary day look like for you in ten years?",
+        "What's something you're still learning to forgive yourself for?",
+        "Which friendship are you most grateful for, and why?",
+        "What do you do when you can't sleep at 3 a.m.?",
+        "What's one thing you'd tell your younger self?"
+      ],
+      dare: [
+        "Look the person across from you in the eye and tell them something you admire about them.",
+        "Text someone you haven't spoken to in a while and say you were thinking of them.",
+        "Share one thing you're grateful for that you never say out loud.",
+        "Tell the group your biggest dream, however unlikely it seems.",
+        "Give each person at the table one genuine compliment.",
+        "Describe your happiest childhood memory in detail.",
+        "Sit in silence for one minute, then share the first thought that came to mind.",
+        "Write a two-line poem about tonight and read it out loud.",
+        "Play the song you've listened to most this year and say what it means to you.",
+        "Let the person on your right ask you one question. You may pass once.",
+        "Make a toast to someone who isn't in the room.",
+        "Share a song that always reminds you of a specific person or time."
+      ]
+    },
+    fun: {
+      truth: [
+        "What's the weirdest thing you've ever eaten?",
+        "If you were stuck on an island with one person here, who and why?",
+        "What's the most ridiculous thing you've done to impress someone?",
+        "What's your most irrational fear?",
+        "What's the strangest dream you can remember?",
+        "What would your villain origin story be?",
+        "What's the most useless talent you have?",
+        "Whose life would you swap with for a day?",
+        "What's the biggest fib you told as a kid?",
+        "Which conspiracy theory secretly sounds plausible to you?",
+        "What's your guilty-pleasure reality show?",
+        "What would you do with a million dollars in 24 hours?"
+      ],
+      dare: [
+        "Do your best dance move for 20 seconds with no music.",
+        "Talk in an accent of the group's choice for the next two turns.",
+        "Let the group style your hair in the silliest way they can.",
+        "Act out a movie scene without speaking until someone guesses it.",
+        "Try to lick your own elbow.",
+        "Do a dramatic slow-motion replay of something you did earlier today.",
+        "Become a news reporter and report live on what's happening at the table.",
+        "Make up a 20-second rap about the player on your left.",
+        "Sing everything you say in opera style until your next turn.",
+        "Strike a superhero pose and announce your superpower and its weakness.",
+        "Speak only in questions until your next turn.",
+        "Balance a book on your head and walk across the room without dropping it."
+      ]
+    }
+  };
+
+  const tod = { mood: 'chill', players: ['Player 1', 'Player 2'], cur: -1,
+                lastType: null, used: {}, spinning: false, deg: 0 };
+
+  function todRenderPlayers() {
+    const box = $('tod-player-tags');
+    box.textContent = '';
+    tod.players.forEach((name, i) => {
+      const tag = document.createElement('span');
+      tag.className = 'p-tag' + (i === tod.cur ? ' active-turn' : '');
+      const label = document.createElement('span');
+      label.textContent = name;
+      const x = document.createElement('button');
+      x.textContent = '×';
+      x.setAttribute('aria-label', 'Remove ' + name);
+      x.addEventListener('click', () => {
+        tod.players.splice(i, 1);
+        if (tod.cur === i) tod.cur = -1; else if (tod.cur > i) tod.cur--;
+        todRenderPlayers();
+      });
+      tag.appendChild(label);
+      tag.appendChild(x);
+      box.appendChild(tag);
+    });
+  }
+
+  function todSetCard(badge, cls, turn, prompt) {
+    const b = $('tod-badge');
+    b.textContent = badge;
+    b.className = 'tod-badge ' + cls;
+    $('tod-turn-lbl').textContent = turn;
+    const p = $('tod-prompt');
+    p.style.opacity = 0;
+    p.style.transform = 'translateY(4px)';
+    setTimeout(() => {
+      p.textContent = prompt;
+      p.style.opacity = 1;
+      p.style.transform = 'none';
+    }, 140);
+  }
+
+  function todTurnLabel() {
+    return tod.cur >= 0 && tod.players[tod.cur] ? tod.players[tod.cur] + ' — your turn' : 'Anyone can take this one';
+  }
+
+  function todPick(type) {
+    const key = tod.mood + type, list = TOD[tod.mood][type];
+    const u = tod.used[key] || (tod.used[key] = []);
+    if (u.length >= list.length) u.length = 0;
+    let i;
+    do { i = rand(list.length); } while (u.includes(i));
+    u.push(i);
+    return list[i];
+  }
+
+  function todDraw(type) {
+    tod.lastType = type;
+    todSetCard(type === 'truth' ? 'TRUTH' : 'DARE', type, todTurnLabel(), todPick(type));
+    sfx('card');
+  }
+
+  function todAdd() {
+    const inp = $('tod-name-input');
+    const name = inp.value.trim();
+    if (!name) return;
+    if (tod.players.length >= 8) { $('tod-turn-lbl').textContent = 'The table is full (8 players max)'; return; }
+    tod.players.push(name.slice(0, 16));
+    inp.value = '';
+    todRenderPlayers();
+    sfx('card');
+  }
+
+  function todSpin() {
+    if (tod.spinning) return;
+    if (tod.players.length < 2) { $('tod-turn-lbl').textContent = 'Add at least two players to spin'; return; }
+    tod.spinning = true;
+    let next;
+    do { next = rand(tod.players.length); } while (next === tod.cur);
+    tod.deg += 720 + rand(360);
+    $('tod-spinner').style.transform = 'rotate(' + tod.deg + 'deg)';
+    sfx('spin');
+    setTimeout(() => {
+      tod.cur = next;
+      tod.spinning = false;
+      todRenderPlayers();
+      todSetCard('UP NEXT', 'truth', tod.players[tod.cur] + ' is up', 'Choose Truth or Dare.');
+    }, 1150);
+  }
+
+  $('tod-add-btn').addEventListener('click', todAdd);
+  $('tod-name-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') todAdd(); });
+  $('tod-spin-btn').addEventListener('click', todSpin);
+  $('tod-truth-btn').addEventListener('click', () => todDraw('truth'));
+  $('tod-dare-btn').addEventListener('click', () => todDraw('dare'));
+  $('tod-skip-btn').addEventListener('click', () => todDraw(tod.lastType || (Math.random() < 0.5 ? 'truth' : 'dare')));
+  bindSeg('tod-mood-seg', 'mood', (m) => {
+    tod.mood = m;
+    todSetCard('TABLE READY', 'truth', 'Spin the compass or draw a card', 'Pick Truth or Dare when you are ready.');
+  });
+  todRenderPlayers();
+
+  /* =====================================================
+     3. MEMORY DECK
+     ===================================================== */
+  const ICONS = [
+    '<path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" x2="6" y1="2" y2="4"/><line x1="10" x2="10" y1="2" y2="4"/><line x1="14" x2="14" y1="2" y2="4"/>',
+    '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+    '<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>',
+    '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
+    '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>',
+    '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+    '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>',
+    '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'
+  ];
+  const SVG_OPEN = '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">';
+  const BACK_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>';
+
+  const mem = { mode: 'solo', cards: [], sel: [], lock: false, moves: 0, pairs: 0,
+                turn: 0, scores: [0, 0], token: 0, done: false };
+
+  function memStatus() {
+    const st = $('mem-status'), sc = $('mem-scores');
+    if (mem.mode === 'solo') {
+      st.textContent = mem.done ? 'All pairs found in ' + mem.moves + ' moves!' : 'Pairs found: ' + mem.pairs + '/8';
+      sc.textContent = 'Moves: ' + mem.moves + '  ·  Pairs: ' + mem.pairs + '/8';
+    } else {
+      if (mem.done) {
+        const [a, b] = mem.scores;
+        st.textContent = a === b ? "It's a tie!" : 'Player ' + (a > b ? 1 : 2) + ' wins!';
+      } else st.textContent = 'Player ' + (mem.turn + 1) + ' to flip';
+      sc.textContent = 'Player 1: ' + mem.scores[0] + '  ·  Player 2: ' + mem.scores[1];
+    }
+  }
+
+  function memNew() {
+    mem.token++;
+    mem.sel = []; mem.lock = false; mem.moves = 0; mem.pairs = 0;
+    mem.turn = 0; mem.scores = [0, 0]; mem.done = false;
+    const grid = $('mem-grid');
+    grid.textContent = '';
+    mem.cards = shuffle([0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7]).map((id, i) => {
+      const el = document.createElement('button');
+      el.className = 'mem-card';
+      el.setAttribute('aria-label', 'Card ' + (i + 1));
+      el.innerHTML = '<div class="card-face card-back">' + BACK_SVG + '</div>' +
+                     '<div class="card-face card-front">' + SVG_OPEN + ICONS[id] + '</svg></div>';
+      el.addEventListener('click', () => memFlip(i));
+      grid.appendChild(el);
+      return { id, el, flipped: false, matched: false };
+    });
+    memStatus();
+  }
+
+  function memFlip(i) {
+    const c = mem.cards[i];
+    if (mem.lock || c.flipped || c.matched) return;
+    c.flipped = true;
+    c.el.classList.add('flipped');
+    sfx('flip');
+    mem.sel.push(i);
+    if (mem.sel.length < 2) return;
+
+    mem.lock = true;
+    mem.moves++;
+    const A = mem.cards[mem.sel[0]], B = mem.cards[mem.sel[1]];
+    const tok = mem.token;
+    if (A.id === B.id) {
+      setTimeout(() => {
+        if (tok !== mem.token) return;
+        A.matched = B.matched = true;
+        A.el.classList.add('matched');
+        B.el.classList.add('matched');
+        mem.scores[mem.turn]++;
+        mem.pairs++;
+        mem.sel = [];
+        mem.lock = false;
+        sfx('match');
+        if (mem.pairs === 8) { mem.done = true; setTimeout(() => sfx('win'), 250); }
+        memStatus();
+      }, 420);
+    } else {
+      setTimeout(() => {
+        if (tok !== mem.token) return;
+        A.flipped = B.flipped = false;
+        A.el.classList.remove('flipped');
+        B.el.classList.remove('flipped');
+        mem.sel = [];
+        if (mem.mode === '2p') mem.turn = 1 - mem.turn;
+        mem.lock = false;
+        sfx('miss');
+        memStatus();
+      }, 900);
+    }
+  }
+
+  bindSeg('mem-mode-seg', 'mode', (m) => { mem.mode = m; memNew(); });
+  $('mem-reset-btn').addEventListener('click', memNew);
+  memNew();
+
+  /* =====================================================
+     4. FOUR-IN-A-ROW
+     ===================================================== */
+  const ROWS = 6, COLS = 7;
+  const C4_ORDER = [3, 2, 4, 1, 5, 0, 6];
+  const C4_NAME = { 1: 'Ochre', 2: 'Terracotta' };
+  const c4 = { g: null, turn: 1, starter: 1, over: false, win: [], draw: false,
+               scores: { 1: 0, 2: 0, d: 0 }, mode: 'bot', token: 0 };
+  const c4Cells = [];
+
+  const c4Empty = () => Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+
+  function c4Drop(g, c, p) {
+    for (let r = ROWS - 1; r >= 0; r--) if (!g[r][c]) { g[r][c] = p; return r; }
+    return -1;
+  }
+
+  function c4WinAt(g, r, c, p) {
+    for (const [dr, dc] of [[0, 1], [1, 0], [1, 1], [1, -1]]) {
+      const cells = [[r, c]];
+      for (const s of [1, -1]) {
+        let rr = r + dr * s, cc = c + dc * s;
+        while (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && g[rr][cc] === p) {
+          cells.push([rr, cc]);
+          rr += dr * s; cc += dc * s;
+        }
+      }
+      if (cells.length >= 4) return cells;
+    }
+    return null;
+  }
+
+  function c4Eval(g) {                    // from the bot's (2) point of view
+    let s = 0;
+    for (let r = 0; r < ROWS; r++) { if (g[r][3] === 2) s += 3; else if (g[r][3] === 1) s -= 3; }
+    for (const [dr, dc] of [[0, 1], [1, 0], [1, 1], [1, -1]]) {
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const er = r + dr * 3, ec = c + dc * 3;
+          if (er < 0 || er >= ROWS || ec < 0 || ec >= COLS) continue;
+          let n1 = 0, n2 = 0;
+          for (let k = 0; k < 4; k++) {
+            const v = g[r + dr * k][c + dc * k];
+            if (v === 1) n1++; else if (v === 2) n2++;
+          }
+          if (n1 && n2) continue;
+          if (n2 === 3) s += 5; else if (n2 === 2) s += 2;
+          if (n1 === 3) s -= 6; else if (n1 === 2) s -= 2;
+        }
+      }
+    }
+    return s;
+  }
+
+  function c4Search(g, depth, alpha, beta, p) {
+    const valid = C4_ORDER.filter((c) => !g[0][c]);
+    if (!valid.length) return 0;
+    if (depth === 0) return c4Eval(g);
+    if (p === 2) {
+      let best = -Infinity;
+      for (const c of valid) {
+        const r = c4Drop(g, c, 2);
+        const s = c4WinAt(g, r, c, 2) ? 100000 + depth : c4Search(g, depth - 1, alpha, beta, 1);
+        g[r][c] = 0;
+        if (s > best) best = s;
+        if (best > alpha) alpha = best;
+        if (alpha >= beta) break;
+      }
+      return best;
+    }
+    let best = Infinity;
+    for (const c of valid) {
+      const r = c4Drop(g, c, 1);
+      const s = c4WinAt(g, r, c, 1) ? -100000 - depth : c4Search(g, depth - 1, alpha, beta, 2);
+      g[r][c] = 0;
+      if (s < best) best = s;
+      if (best < beta) beta = best;
+      if (alpha >= beta) break;
+    }
+    return best;
+  }
+
+  function c4BotPick() {
+    const valid = C4_ORDER.filter((c) => !c4.g[0][c]);
+    for (const p of [2, 1]) {              // win now, otherwise block
+      for (const c of valid) {
+        const r = c4Drop(c4.g, c, p);
+        const w = c4WinAt(c4.g, r, c, p);
+        c4.g[r][c] = 0;
+        if (w) return c;
+      }
+    }
+    if (Math.random() < 0.08) return valid[rand(valid.length)];   // keep it beatable
+    let best = -Infinity, picks = [];
+    for (const c of valid) {
+      const r = c4Drop(c4.g, c, 2);
+      const s = c4Search(c4.g, 4, -Infinity, Infinity, 1);
+      c4.g[r][c] = 0;
+      if (s > best) { best = s; picks = [c]; } else if (s === best) picks.push(c);
+    }
+    return picks[rand(picks.length)];
+  }
+
+  function c4Render() {
+    const win = new Set(c4.win.map(([r, c]) => r * COLS + c));
+    c4Cells.forEach((el, i) => {
+      const r = Math.floor(i / COLS), c = i % COLS, v = c4.g[r][c];
+      el.className = 'c4-cell' + (v ? ' p' + v : '') + (win.has(i) ? ' win' : '');
+    });
+    let msg;
+    if (c4.over) msg = (c4.draw ? "It's a draw!" : C4_NAME[c4.turn] + ' wins!') + ' Tap the board or Reset to play again.';
+    else if (c4.mode === 'bot' && c4.turn === 2) msg = 'Terracotta is thinking…';
+    else msg = C4_NAME[c4.turn] + ' to drop';
+    $('c4-status').textContent = msg;
+    $('c4-scores').textContent = 'Ochre: ' + c4.scores[1] + '  ·  Terracotta: ' + c4.scores[2] + '  ·  Draws: ' + c4.scores.d;
+  }
+
+  function c4BotSoon() {
+    const tok = c4.token;
+    setTimeout(() => {
+      if (tok !== c4.token || c4.over || c4.turn !== 2 || c4.mode !== 'bot') return;
+      c4Move(c4BotPick());
+    }, 480);
+  }
+
+  function c4Move(c) {
+    const p = c4.turn;
+    const r = c4Drop(c4.g, c, p);
+    if (r < 0) { sfx('miss'); return; }
+    sfx('drop');
+    const w = c4WinAt(c4.g, r, c, p);
+    if (w) {
+      c4.over = true; c4.win = w; c4.scores[p]++;
+      setTimeout(() => sfx('win'), 200);
+    } else if (c4.g[0].every((v) => v)) {
+      c4.over = true; c4.draw = true; c4.scores.d++;
+    } else c4.turn = p === 1 ? 2 : 1;
+    c4Render();
+    if (!c4.over && c4.mode === 'bot' && c4.turn === 2) c4BotSoon();
+  }
+
+  function c4NewRound(flipStarter) {
+    c4.token++;
+    if (flipStarter) c4.starter = c4.starter === 1 ? 2 : 1;
+    c4.g = c4Empty();
+    c4.turn = c4.starter;
+    c4.over = false; c4.draw = false; c4.win = [];
+    c4Render();
+    if (c4.mode === 'bot' && c4.turn === 2) c4BotSoon();
+  }
+
+  function c4Click(c) {
+    if (c4.over) { c4NewRound(true); return; }
+    if (c4.mode === 'bot' && c4.turn === 2) return;
+    c4Move(c);
+  }
+
+  (function buildC4() {
+    const board = $('c4-board');
+    for (let i = 0; i < ROWS * COLS; i++) {
+      const el = document.createElement('div');
+      el.className = 'c4-cell';
+      el.addEventListener('click', () => c4Click(i % COLS));
+      board.appendChild(el);
+      c4Cells.push(el);
+    }
+  })();
+  bindSeg('c4-mode-seg', 'mode', (m) => {
+    c4.mode = m; c4.scores = { 1: 0, 2: 0, d: 0 }; c4.starter = 1; c4NewRound(false);
+  });
+  $('c4-reset-btn').addEventListener('click', () => c4NewRound(c4.over));
+  c4NewRound(false);
+})();
+</script>
+</body>
+</html>
