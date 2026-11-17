@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Afterglow — Cozy Café &amp; Tabletop Games</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,500;0,6..72,600;1,6..72,500&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+    :root {
+      --bg-wood: #1f1916;
+      --paper: #fbf7f0;
+      --paper-2: #f2ebe0;
+      --ink: #2a211c;
+      --ink-muted: #75685f;
+      --border: #e2d7c8;
+      --terracotta: #c45d3b;
+      --sage: #3d6b58;
+      --ochre: #c88a36;
+      --shadow: 0 18px 42px rgba(18, 12, 8, 0.28);
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow-x: hidden;
+      background: var(--bg-wood);
+      color: var(--ink);
+      font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #bg-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    #shell {
+      position: relative;
+      z-index: 2;
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 18px 16px 28px;
+    }
+
+    /* Header */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+      color: var(--paper);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: var(--paper);
+      color: var(--terracotta);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+
+    .brand-title {
+      font-family: 'Newsreader', Georgia, serif;
+      font-size: 25px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--paper);
+      line-height: 1.05;
+    }
+
+    .brand-sub {
+      font-size: 11px;
+      color: rgba(251, 247, 240, 0.7);
+      letter-spacing: 0.03em;
+    }
+
+    .controls-row {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .pill-btn {
+      background: rgba(251, 247, 240, 0.12);
+      border: 1px solid rgba(251, 247, 240, 0.22);
+      color: var(--paper);
+      border-radius: 9px;
+      height: 34px;
+      padding: 0 11px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: background 0.2s ease, transform 0.15s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease;
+    }
+
+    .pill-btn:hover { background: rgba(251, 247, 240, 0.2); }
+    .pill-btn:active { transform: scale(0.96); }
+    .pill-btn.muted { opacity: 0.48; }
+
+    /* Navigation Tabs */
+    .nav-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .tab-btn {
+      background: rgba(251, 247, 240, 0.1);
+      border: 1px solid rgba(251, 247, 240, 0.16);
+      color: rgba(251, 247, 240, 0.78);
+      border-radius: 11px;
+      padding: 10px 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .tab-btn:hover {
+      background: rgba(251, 247, 240, 0.18);
+      color: var(--paper);
+    }
+
+    .tab-btn.active {
+      background: var(--paper);
+      border-color: var(--paper);
+      color: var(--ink);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+    }
+
+    /* Warm Linen Paper Card Panel */
+    .panel {
+      background: var(--paper);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .view {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+      animation: fadeSlide 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .view.active { display: flex; }
+
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .view-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .view-title {
+      font-family: 'Newsreader', Georgia, serif;
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--ink);
+      margin: 0;
+      letter-spacing: -0.015em;
+    }
+
+    .view-sub {
+      font-size: 12px;
+      color: var(--ink-muted);
+      margin-top: 2px;
+    }
+
+    .seg-group {
+      display: flex;
+      background: var(--paper-2);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 3px;
+      gap: 2px;
+    }
+
+    .seg-btn {
+      background: transparent;
+      border: none;
+      color: var(--ink-muted);
+      border-radius: 7px;
+      padding: 6px 11px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+
+    .seg-btn.active {
+      background: var(--paper);
+      color: var(--ink);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    }
+
+    .primary-btn {
+      background: var(--terracotta);
+      border: none;
+      color: #fffaf5;
+      border-radius: 9px;
+      padding: 10px 18px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.14s cubic-bezier(0.22, 1, 0.36, 1), filter 0.15s ease;
+    }
+    .primary-btn:hover { filter: brightness(1.06); }
+    .primary-btn:active { transform: scale(0.97); }
+
+    .ghost-btn {
+      background: var(--paper);
+      border: 1px solid var(--border);
+      color: var(--ink);
+      border-radius: 9px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .ghost-btn:hover { border-color: var(--ink-muted); background: var(--paper-2); }
+
+    .status-bar {
+      text-align: center;
+      padding: 8px 14px;
+      background: var(--paper-2);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--ink);
+    }
+
+    /* 1. INFINITE XO */
+    .xo-board {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      width: min(100%, 296px);
+      margin: 4px auto 16px;
+    }
+
+    .xo-cell {
+      aspect-ratio: 1;
+      background: var(--paper-2);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.15s ease, background 0.15s ease, opacity 0.25s ease;
+      padding: 0;
+    }
+
+    .xo-cell:hover { border-color: var(--ink-muted); background: #eae1d3; }
+    .xo-cell:active { transform: scale(0.95); }
+    .xo-cell.fading { opacity: 0.36; border-style: dashed; border-color: var(--ink-muted); }
+    .xo-cell.win { background: rgba(61, 107, 88, 0.15); border-color: var(--sage); }
+    .xo-cell svg { animation: popIn 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
+
+    @keyframes popIn {
+      from { transform: scale(0.6); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    /* 2. TRUTH OR DARE */
+    .tod-layout {
+      display: grid;
+      grid-template-columns: 1fr 1.35fr;
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .tod-players-box {
+      background: var(--paper-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .player-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 10px 0 12px;
+    }
+
+    .p-tag {
+      background: var(--paper);
+      border: 1px solid var(--border);
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .p-tag.active-turn {
+      background: var(--ink);
+      border-color: var(--ink);
+      color: var(--paper);
+    }
+
+    .p-tag button {
+      background: none;
+      border: none;
+      color: inherit;
+      cursor: pointer;
+      font-weight: 700;
+      padding: 0;
+      font-size: 13px;
+      opacity: 0.65;
+    }
+
+    .add-player-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .txt-input {
+      flex: 1;
+      background: var(--paper);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      color: var(--ink);
+      font-size: 12px;
+      outline: none;
+    }
+    .txt-input:focus { border-color: var(--terracotta); }
+
+    .spinner-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: auto;
+      padding-top: 16px;
+      gap: 10px;
+    }
+
+    .compass-spinner {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: var(--paper);
+      border: 1.5px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--terracotta);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+      transition: transform 1.15s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .tod-card-stage {
+      background: var(--paper-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 20px;
+      min-height: 255px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      text-align: center;
+    }
+
+    .tod-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      margin: 0 auto 8px;
+    }
+    .tod-badge.truth { background: rgba(61, 107, 88, 0.14); color: var(--sage); }
+    .tod-badge.dare { background: rgba(196, 93, 59, 0.14); color: var(--terracotta); }
+
+    .tod-prompt {
+      font-family: 'Newsreader', Georgia, serif;
+      font-size: 21px;
+      font-weight: 500;
+      line-height: 1.42;
+      color: var(--ink);
+      margin: 12px 0 18px;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .tod-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    /* 3. MEMORY DECK */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      width: min(100%, 360px);
+      margin: 4px auto 14px;
+      perspective: 900px;
+    }
+
+    .mem-card {
+      aspect-ratio: 1;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease;
+      cursor: pointer;
+      background: transparent;
+      border: none;
+      padding: 0;
+    }
+
+    .mem-card:hover:not(.flipped):not(.matched) { transform: translateY(-2px); }
+    .mem-card.flipped, .mem-card.matched { transform: rotateY(180deg); }
+    .mem-card.matched { cursor: default; opacity: 0.65; }
+
+    .card-face {
+      position: absolute;
+      inset: 0;
+      backface-visibility: hidden;
+      border-radius: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card-back {
+      background: var(--paper-2);
+      border: 1.5px solid var(--border);
+      background-image: radial-gradient(rgba(196, 93, 59, 0.14) 1px, transparent 1px);
+      background-size: 9px 9px;
+      color: var(--terracotta);
+    }
+
+    .card-front {
+      background: var(--paper);
+      border: 1.5px solid var(--sage);
+      transform: rotateY(180deg);
+      color: var(--ink);
+    }
+
+    /* 4. FOUR IN A ROW */
+    .c4-board {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 7px;
+      width: min(100%, 390px);
+      margin: 4px auto 14px;
+      background: var(--paper-2);
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+    }
+
+    .c4-cell {
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: var(--paper);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: border-color 0.15s ease, transform 0.12s ease;
+    }
+
+    .c4-cell:hover { border-color: var(--ink-muted); }
+    .c4-cell.p1 {
+      background: var(--ochre);
+      border-color: #a97024;
+      animation: dropToken 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .c4-cell.p2 {
+      background: var(--terracotta);
+      border-color: #9e4326;
+      animation: dropToken 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .c4-cell.win { outline: 2.5px solid var(--sage); outline-offset: 2px; }
+
+    @keyframes dropToken {
+      from { transform: translateY(-18px) scale(0.88); opacity: 0.6; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+
+    .score-strip {
+      display: flex;
+      justify-content: center;
+      gap: 18px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-top: auto;
+      padding-top: 10px;
+      color: var(--ink-muted);
+    }
+
+    @media (max-width: 680px) {
+      .tod-layout { grid-template-columns: 1fr; }
+      .nav-tabs { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="bg-canvas"></canvas>
+
+  <div id="shell">
+    <!-- Top Bar -->
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" x2="6" y1="2" y2="4"/><line x1="10" x2="10" y1="2" y2="4"/><line x1="14" x2="14" y1="2" y2="4"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title">Afterglow</div>
+          <div class="brand-sub">Cozy Café &amp; Tabletop Lounge</div>
+        </div>
+      </div>
+
+      <div class="controls-row">
+        <button class="pill-btn" id="vibe-btn" title="Switch Atmosphere">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M16 14v6M8 14v6M12 16v6"/></svg>
+          <span id="vibe-lbl">Rainy Café</span>
+        </button>
+        <button class="pill-btn" id="music-btn" title="Toggle Lo-Fi Music">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          <span>Music</span>
+        </button>
+        <button class="pill-btn" id="sfx-btn" title="Toggle Sound Effects">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span>SFX</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="nav-tabs">
+      <button class="tab-btn active" data-tab="xo">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        <span>Infinite XO</span>
+      </button>
+      <button class="tab-btn" data-tab="tod">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>Truth &amp; Dare</span>
+      </button>
+      <button class="tab-btn" data-tab="cards">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="18" x="5" y="3" rx="2"/><path d="M12 8v8M8 12h8"/></svg>
+        <span>Memory Deck</span>
+      </button>
+      <button class="tab-btn" data-tab="c4">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="16" r="3"/><circle cx="16" cy="8" r="3"/><circle cx="16" cy="16" r="3"/></svg>
+        <span>4-in-a-Row</span>
+      </button>
+    </div>
+
+    <!-- Main Paper Panel -->
+    <div class="panel">
+
+      <!-- 1. INFINITE XO -->
+      <div class="view active" id="view-xo">
+        <div class="view-head">
+          <div>
+            <h2 class="view-title">Infinite XO</h2>
+            <div class="view-sub">Max 3 marks each — your 4th move fades your oldest mark.</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <div class="seg-group" id="xo-mode-seg">
+              <button class="seg-btn active" data-mode="bot">Solo vs Bot</button>
+              <button class="seg-btn" data-mode="2p">2P Pass</button>
+            </div>
+            <button class="ghost-btn" id="xo-reset-btn">Reset</button>
+          </div>
+        </div>
+        <div class="status-bar" id="xo-status">Terracotta (X) to move</div>
+        <div class="xo-board" id="xo-board"></div>
+        <div class="score-strip" id="xo-scores">Terracotta (X): 0 &nbsp;·&nbsp; Sage (O): 0</div>
+      </div>
+
+      <!-- 2. TRUTH OR DARE -->
+      <div class="view" id="view-tod">
+        <div class="view-head">
+          <div>
+            <h2 class="view-title">Truth &amp; Dare</h2>
+            <div class="view-sub">Real hangout questions &amp; dares. Spin the compass to pick who's up.</div>
+          </div>
+          <div class="seg-group" id="tod-mood-seg">
+            <button class="seg-btn active" data-mood="chill">Hangout</button>
+            <button class="seg-btn" data-mood="deep">Late Night</button>
+            <button class="seg-btn" data-mood="fun">Wild</button>
+          </div>
+        </div>
+
+        <div class="tod-layout">
+          <div class="tod-players-box">
+            <div style="font-size:11px;font-weight:700;color:var(--ink-muted);letter-spacing:0.06em;text-transform:uppercase;">Table Circle</div>
+            <div class="player-tags" id="tod-player-tags"></div>
+            <div class="add-player-row">
+              <input type="text" class="txt-input" id="tod-name-input" placeholder="Add friend's name..." maxlength="16" />
+              <button class="ghost-btn" id="tod-add-btn">Add</button>
+            </div>
+            <div class="spinner-wrap">
+              <div class="compass-spinner" id="tod-spinner">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="12 2 15 12 12 22 9 12 12 2"/>
+                </svg>
+              </div>
+              <button class="primary-btn" id="tod-spin-btn">Spin Compass</button>
+            </div>
+          </div>
+
+          <div class="tod-card-stage">
+            <div>
+              <div class="tod-badge truth" id="tod-badge">TABLE READY</div>
+              <div style="font-size:12px;color:var(--ink-muted);" id="tod-turn-lbl">Spin the compass or draw a card</div>
+            </div>
+            <div class="tod-prompt" id="tod-prompt">
