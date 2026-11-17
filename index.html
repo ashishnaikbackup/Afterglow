@@ -634,6 +634,11 @@
             <div class="view-sub">Max 3 marks each — your 4th move fades your oldest mark.</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
+            <div class="seg-group" id="xo-level-seg" title="Bot difficulty">
+              <button class="seg-btn active" data-level="easy">Easy</button>
+              <button class="seg-btn" data-level="medium">Medium</button>
+              <button class="seg-btn" data-level="hard">Hard</button>
+            </div>
             <div class="seg-group" id="xo-mode-seg">
               <button class="seg-btn active" data-mode="bot">Solo vs Bot</button>
               <button class="seg-btn" data-mode="2p">2P Pass</button>
@@ -1267,7 +1272,7 @@
   const XO_ORDER = [4, 0, 2, 6, 8, 1, 3, 5, 7];
 
   const xo = { b: Array(9).fill(null), q: { X: [], O: [] }, turn: 'X', starter: 'X',
-               over: false, win: null, scores: { X: 0, O: 0 }, mode: 'bot', token: 0 };
+               over: false, win: null, scores: { X: 0, O: 0 }, mode: 'bot', level: 'easy', token: 0 };
   const xoCells = [];
 
   function xoApply(b, q, p, c) {
@@ -1295,16 +1300,24 @@
     return best;
   }
 
+  // Bot strength: search depth + chance of a random slip (checked first, so it can miss wins too)
+  const XO_LEVELS = {
+    easy:   { depth: 2, slip: 0.40 },
+    medium: { depth: 4, slip: 0.18 },
+    hard:   { depth: 5, slip: 0.08 }
+  };
+
   function xoBotPick() {
+    const L = XO_LEVELS[xo.level];
     const empty = XO_ORDER.filter((i) => !xo.b[i]);
+    if (Math.random() < L.slip) return empty[rand(empty.length)];
     for (const c of empty) {                       // take a win if there is one
       if (xoWin(xoApply(xo.b, xo.q, 'O', c).b, 'O')) return c;
     }
-    if (Math.random() < 0.1) return empty[rand(empty.length)];   // keep it beatable
     let best = -Infinity, picks = [];
     for (const c of empty) {
       const r = xoApply(xo.b, xo.q, 'O', c);
-      const s = -xoNegamax(r.b, r.q, 'X', 5, -Infinity, Infinity);
+      const s = -xoNegamax(r.b, r.q, 'X', L.depth, -Infinity, Infinity);
       if (s > best) { best = s; picks = [c]; } else if (s === best) picks.push(c);
     }
     return picks[rand(picks.length)];
@@ -1380,7 +1393,12 @@
     }
   })();
   bindSeg('xo-mode-seg', 'mode', (m) => {
-    xo.mode = m; xo.scores = { X: 0, O: 0 }; xo.starter = 'X'; xoNewRound(false);
+    xo.mode = m; xo.scores = { X: 0, O: 0 }; xo.starter = 'X';
+    $('xo-level-seg').style.display = m === 'bot' ? '' : 'none';
+    xoNewRound(false);
+  });
+  bindSeg('xo-level-seg', 'level', (l) => {
+    xo.level = l; xo.scores = { X: 0, O: 0 }; xo.starter = 'X'; xoNewRound(false);
   });
   $('xo-reset-btn').addEventListener('click', () => xoNewRound(xo.over));
   xoRender();
